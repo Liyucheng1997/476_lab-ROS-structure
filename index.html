@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ROS 图解 · ROS 1 与 ROS 2 的 3D 可视化</title>
+    <script>
+      // 尽早设置主题，避免闪烁
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem('theme'); } catch (e) {}
+        if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <div class="brand-name">ROS 图解</div>
+            <div class="brand-sub">ROS 1 与 ROS 2 的 3D 可视化</div>
+          </div>
+        </div>
+        <nav id="nav" aria-label="场景"></nav>
+        <div class="side-foot">
+          <button class="btn btn-sm" id="themeBtn" type="button">深色模式</button>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <div id="gl"></div>
+        <header class="scene-head">
+          <h1 id="sceneTitle"></h1>
+          <p id="sceneSub"></p>
+        </header>
+        <div class="hint" id="hint">拖动旋转 · 滚轮缩放 · 右键平移 · 点击方块看详情</div>
+        <div class="stepper card" id="stepper" hidden></div>
+        <section class="info card" id="info" aria-live="polite"></section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

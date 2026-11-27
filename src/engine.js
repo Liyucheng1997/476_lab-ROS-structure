@@ -91,6 +91,9 @@ export class Stage {
 
     this.root = new THREE.Group();
     this.scene.add(this.root);
+    this.pulseRoot = new THREE.Group();   // 一次性的飞行小点，不随场景重建而清空
+    this.scene.add(this.pulseRoot);
+    this.pulses = [];
     this.dots = null;
     this._buildDots();
 
@@ -124,16 +127,18 @@ export class Stage {
     if (this.spec) this._focusCamera(false);
   }
 
-  load(spec, { keepCamera = false, instant = false } = {}) {
+  /** keep：已经在画面上的节点 id 集合。给了它就是“局部更新”：这些节点不重播入场动画，只有新节点弹出来 */
+  load(spec, { keepCamera = false, instant = false, keep = null } = {}) {
     this._clear();
     this.spec = spec;
+    this.partial = !!keep;
     this.step = null; this.selected = null; this.hovered = null;
     const P = this.pal;
     this.scene.background = new THREE.Color(P.bg);
     this.bounds = new THREE.Box3();
 
     for (const g of spec.groups || []) this._buildGroup(g);
-    (spec.nodes || []).forEach((n, i) => this._buildNode(n, i, instant));
+    (spec.nodes || []).forEach((n, i) => this._buildNode(n, keep ? 0 : i, instant || !!keep?.has(n.id)));
     for (const e of spec.edges || []) this._buildEdge(e);
     this.born = instant ? -10 : this.time;
     this._apply();
@@ -149,6 +154,24 @@ export class Stage {
   select(id) {
     this.selected = id || null;
     this._apply();
+  }
+
+  /** 重新取景（节点增减之后用） */
+  refit() { this._focusCamera(false); }
+
+  /**
+   * 让一个小点沿着若干节点依次飞过去，表示一个数据包。
+   * @param ids 途经的节点 id
+   * @param opts { dur: 秒, lift: 中途向上拱起多少（区分来回方向）, fail: 半路消失（丢包）, size }
+   */
+  pulse(ids, color, { dur = 0.6, lift = 0, fail = false, size = 1 } = {}) {
+    if (REDUCED || this.pulses.length > 500) return;
+    const pts = ids.map((id) => this.byId.get(id)).filter(Boolean).map((n) => n.g.position.clone().add(new V3(0, 0, n.spec.size[2] / 2 + 0.22)));
+    if (pts.length < 2) return;
+    const m = new THREE.Mesh(Stage.pulseGeo, new THREE.MeshBasicMaterial({ color, transparent: true, depthTest: false }));
+    m.renderOrder = 8; m.scale.setScalar(size);
+    this.pulseRoot.add(m);
+    this.pulses.push({ m, pts, t: 0, dur, lift, fail, size });
   }
 
   /* ---------- 构建 ---------- */
@@ -211,7 +234,7 @@ export class Stage {
     label.position.z = t / 2 + 0.006;
     g.add(box, label);
     this.root.add(g);
-    const node = { spec, g, box, label, canvas, tex, key: '', index, scale: instant ? 1 : 0.001 };
+    const node = { spec, g, box, label, canvas, tex, key: '', index, animate: !instant, scale: instant ? 1 : 0.001 };
     box.userData.node = node;
     g.scale.setScalar(node.scale);
     this.nodes.push(node);
@@ -465,14 +488,14 @@ export class Stage {
     const age = this.time - (this.born ?? 0);
     for (const n of this.nodes) {
       const id = n.spec.id;
-      const intro = REDUCED ? 1 : Math.min(1, Math.max(0, (age - n.index * 0.022) / 0.5));
+      const intro = REDUCED || !n.animate ? 1 : Math.min(1, Math.max(0, (age - n.index * 0.022) / 0.5));
       const target = id === this.hovered || id === this.selected ? 1.06 : 1;
       if (intro < 1) n.scale = Math.max(0.001, easeBack(intro));
       else n.scale += (target - n.scale) * Math.min(1, dt * 12);
       n.g.scale.setScalar(n.scale);
     }
 
-    const edgesOn = REDUCED || age > 0.35;
+    const edgesOn = REDUCED || this.partial || age > 0.35;
     for (const e of this.edges) {
       e.line.visible = edgesOn;
       for (const c of e.cones) c.visible = edgesOn;
@@ -484,6 +507,20 @@ export class Stage {
         if (d.rev) t = 1 - t;
         d.m.position.copy(e.curve.getPoint(t));
       }
+    }
+    for (let i = this.pulses.length - 1; i >= 0; i--) {
+      const p = this.pulses[i];
+      p.t += dt / p.dur;
+      const end = p.fail ? 0.5 : 1;
+      if (p.t >= end) {
+        this.pulseRoot.remove(p.m); p.m.material.dispose();
+        this.pulses.splice(i, 1);
+        continue;
+      }
+      const seg = p.t * (p.pts.length - 1), k = Math.min(p.pts.length - 2, Math.floor(seg));
+      p.m.position.lerpVectors(p.pts[k], p.pts[k + 1], seg - k);
+      p.m.position.y += p.lift * Math.sin(Math.PI * p.t);
+      if (p.fail) { p.m.material.opacity = 1 - p.t / end; p.m.scale.setScalar(p.size * (1 + p.t)); }
     }
     this.renderer.render(this.scene, this.camera);
   }
@@ -499,3 +536,4 @@ export class Stage {
 }
 
 Stage.dotGeo = new THREE.SphereGeometry(0.065, 12, 10);
+Stage.pulseGeo = new THREE.SphereGeometry(0.1, 14, 12);

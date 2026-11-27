@@ -1,0 +1,8 @@
+# 目标：数列长度
+int32 order
+---
+# 结果：完整数列
+int32[] sequence
+---
+# 反馈：目前算出的部分
+int32[] sequence

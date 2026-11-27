@@ -3,16 +3,25 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "用 Three.js 可视化 ROS 1 / ROS 2 的架构、通信、编译系统与代码结构",
+  "description": "用 Three.js 图解 ROS 1 / ROS 2，并附带一个按 ROS 2 架构实现、可以实际运行的 ROS 2（Node.js）",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ros2": "node ros2/cli/ros2.js",
+    "test": "node --test ros2/test/ros2.test.js"
   },
   "dependencies": {
+    "buffer": "^6.0.3",
     "three": "^0.170.0"
   },
   "devDependencies": {
     "vite": "^6.0.0"
+  },
+  "bin": {
+    "ros2": "ros2/cli/ros2.js"
+  },
+  "imports": {
+    "#rcljs": "./ros2/rcljs/index.js"
   }
 }

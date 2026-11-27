@@ -11,6 +11,7 @@ let current = null; // 当前场景
 let stepIdx = -1;   // -1 = 全景，未进入分步讲解
 let selected = null;
 let timer = null;
+let lab = null;     // 「实机运行」页，第一次打开时才加载
 
 /* ---------- 导航 ---------- */
 const nav = $('nav');
@@ -27,7 +28,7 @@ for (const sec of sections) {
 }
 
 function openScene(id) {
-  const sc = scenes.find((s) => s.id === id) || scenes[0];
+  const sc = scenes.find((s) => s.id === id) || scenes.find((s) => !s.lab);
   if (current === sc) return;
   current = sc; stepIdx = -1; selected = null; stopAuto();
   for (const b of nav.querySelectorAll('.nav-item')) {
@@ -38,10 +39,21 @@ function openScene(id) {
   $('sceneTitle').textContent = sc.title;
   $('sceneSub').textContent = sc.subtitle || '';
   document.title = `${sc.title} · ROS 图解`;
+  if (sc.lab) return openLab(sc);
+  lab?.leave();
   renderStepper();
   renderInfo();
   syncInsets();
   stage.load(sc);
+}
+
+async function openLab(sc) {
+  $('stepper').hidden = true;
+  stage.load({ nodes: [], edges: [] });
+  lab ??= (await import('./lab/lab.js')).createLab(stage, document.querySelector('.stage'));
+  if (current !== sc) return;       // 加载期间已经切到别的场景
+  lab.enter();
+  syncInsets();
 }
 
 /* ---------- 右侧详情 ---------- */
@@ -81,7 +93,7 @@ function select(id) {
   renderInfo();
   if (id) $('hint').classList.add('gone');
 }
-stage.onSelect = select;
+stage.onSelect = (id) => (current.lab ? lab?.select(id) : select(id));
 
 /* ---------- 分步讲解 ---------- */
 function renderStepper() {
@@ -111,7 +123,7 @@ function renderStepper() {
 }
 
 function goStep(i) {
-  const steps = current.steps;
+  const steps = current?.steps;
   if (!steps) return;
   stepIdx = Math.max(-1, Math.min(steps.length - 1, i));
   if (stepIdx === steps.length - 1 || stepIdx === -1) stopAuto();
@@ -141,12 +153,13 @@ addEventListener('keydown', (ev) => {
   if (ev.target.closest('input, textarea')) return;
   if (ev.key === 'ArrowRight') { stopAuto(); goStep(stepIdx + 1); }
   else if (ev.key === 'ArrowLeft') { stopAuto(); goStep(stepIdx - 1); }
-  else if (ev.key === 'Escape') { if (selected) select(null); else { stopAuto(); goStep(-1); } }
+  else if (ev.key === 'Escape') { if (current.lab) lab?.select(null); else if (selected) select(null); else { stopAuto(); goStep(-1); } }
 });
 
 /* ---------- 画面留白：避开右侧面板与底部步骤条 ---------- */
 function syncInsets() {
   if (innerWidth <= 860) return stage.setInsets(0, 0, 44);
+  if (current?.lab) return lab && stage.setInsets(...lab.insets(), 64);
   const st = $('stepper');
   stage.setInsets(372, st.hidden ? 0 : st.offsetHeight + 44, 64);
 }
